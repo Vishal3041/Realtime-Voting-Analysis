@@ -56,11 +56,6 @@ if __name__ == "__main__":
     cur.execute("""SELECT * FROM candidates""")
     candidates = cur.fetchall()
 
-    # # Example candidate data
-    # candidate1 = candidates[0][1]  # Assuming the candidate information is in the second column
-    # candidate2 = candidates[1][1]
-    # candidate3 = candidates[2][1]
-
     # Initialize MinHash object
     num_perm = 128
     minhash = MinHash(num_perm)

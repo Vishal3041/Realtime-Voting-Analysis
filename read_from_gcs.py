@@ -105,31 +105,39 @@ if __name__ == "__main__":
     candidates = cur.fetchall()
     print(candidates)
 
+    cur.execute("""
+                SELECT * FROM voters
+            """)
+    voters = cur.fetchall()
+    print(candidates)
+
     # biography, campaign_platform,
     # %(biography)s, %(campaign_platform)s,
-    # if len(candidates) == 0:
-    #     # Read candidates.csv from GCS and insert candidates data into PostgreSQL
-    #     candidates_file_content = read_csv_from_gcs("voting-dataset", "candidates.csv")
-    #     for row in csv.DictReader(candidates_file_content):
-    #         cur.execute("""
-    #             INSERT INTO candidates (candidate_id, candidate_name, party_affiliation, photo_url)
-    #             VALUES (%(candidate_id)s, %(candidate_name)s, %(party_affiliation)s, %(photo_url)s)
-    #         """, row)
-    #     conn.commit()
+    if len(candidates) == 0:
+        # Read candidates.csv from GCS and insert candidates data into PostgreSQL
+        candidates_file_content = read_csv_from_gcs("voting-dataset", "candidates.csv")
+        for row in csv.DictReader(candidates_file_content):
+            cur.execute("""
+                INSERT INTO candidates (candidate_id, candidate_name, party_affiliation, photo_url)
+                VALUES (%(candidate_id)s, %(candidate_name)s, %(party_affiliation)s, %(photo_url)s)
+            """, row)
+        conn.commit()
 
-    # Loop through voters.csv from GCS, insert voters record into PostgreSQL, and create Kafka topic
-    voters_file_content = read_csv_from_gcs("voting-dataset", "voters.csv")
-    for row in csv.DictReader(voters_file_content):
-        # insert_voters(conn, cur, row)
+    if len(voters) == 0:
 
-        # Produce to Kafka topic
-        producer.produce(
-            voters_topic,
-            key=row["voter_id"],
-            value=json.dumps(row),
-            on_delivery=delivery_report
-        )
-        producer.flush()
+        # Loop through voters.csv from GCS, insert voters record into PostgreSQL, and create Kafka topic
+        voters_file_content = read_csv_from_gcs("voting-dataset", "voters.csv")
+        for row in csv.DictReader(voters_file_content):
+            insert_voters(conn, cur, row)
+
+            # Produce to Kafka topic
+            producer.produce(
+                voters_topic,
+                key=row["voter_id"],
+                value=json.dumps(row),
+                on_delivery=delivery_report
+            )
+            producer.flush()
 
     # Close PostgreSQL connection
     cur.close()

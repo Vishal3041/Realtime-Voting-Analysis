@@ -156,7 +156,7 @@ if __name__ == "__main__":
     voters_data = []
 
     # Generate and store voter data in the list
-    for i in range(100):
+    for i in range(1000):
         print(i)
         voter_data = generate_voter_data()
         voters_data.append(voter_data)

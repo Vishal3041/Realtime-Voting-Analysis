@@ -137,6 +137,7 @@ def paginate_table(table_data):
 
 
 # Function to update data displayed on the dashboard
+# Function to update data displayed on the dashboard
 def update_data():
     # Placeholder to display last refresh time
     last_refresh = st.empty()
@@ -154,64 +155,74 @@ def update_data():
     # Fetch data from Kafka on aggregated votes per candidate
     consumer = create_kafka_consumer("aggregated_votes_per_candidate")
     data = fetch_data_from_kafka(consumer)
-    results = pd.DataFrame(data)
-
-    # Identify the leading candidate
-    results = results.loc[results.groupby('candidate_id')['total_votes'].idxmax()]
-    leading_candidate = results.loc[results['total_votes'].idxmax()]
-
-    # Display leading candidate information
-    st.markdown("""---""")
-    st.header('Leading Candidate')
-    col1, col2 = st.columns(2)
-    with col1:
-        st.image(leading_candidate['photo_url'], width=200)
-    with col2:
-        st.header(leading_candidate['candidate_name'])
-        st.subheader(leading_candidate['party_affiliation'])
-        st.subheader("Total Vote: {}".format(leading_candidate['total_votes']))
-
-    # Display statistics and visualizations
-    st.markdown("""---""")
-    st.header('Statistics')
-    results = results[['candidate_id', 'candidate_name', 'party_affiliation', 'total_votes']]
-    results = results.reset_index(drop=True)
-
-    # Compute total votes and append as a new row to the DataFrame
-    total_votes_row = {'candidate_name': 'Total Votes', 'total_votes': results['total_votes'].sum()}
-    results = pd.concat([results, pd.DataFrame(total_votes_row, index=[0])], ignore_index=True)
-
-    col1, col2 = st.columns(2)
-
-    results_without_total_votes = results[:-1]  # Exclude the last row
-    # Display bar chart and donut chart
-    with col1:
-        bar_fig = plot_colored_bar_chart(results_without_total_votes)
-        st.pyplot(bar_fig)
-
-    with col2:
-        donut_fig = plot_donut_chart(results_without_total_votes, title='Vote Distribution')
-        st.pyplot(donut_fig)
-
-    # Display table with candidate statistics
-    st.table(results)
 
     # Fetch data from Kafka on aggregated turnout by location
     location_consumer = create_kafka_consumer("aggregated_turnout_by_location")
     location_data = fetch_data_from_kafka(location_consumer)
     location_result = pd.DataFrame(location_data)
-    # print("location_result: ", location_result)
 
-    # Identify locations with maximum turnout
-    location_result = location_result.loc[location_result.groupby('address_state')['count'].idxmax()]
-    location_result = location_result.reset_index(drop=True)
+    # Check if data is available
+    if data and location_data:
+        results = pd.DataFrame(data)
 
-    # Display location-based voter information with pagination
-    st.header("Location of Voters")
-    paginate_table(location_result)
+        # Identify the leading candidate
+        results = results.loc[results.groupby('candidate_id')['total_votes'].idxmax()]
+        leading_candidate = results.loc[results['total_votes'].idxmax()]
 
-    # Update the last refresh time
-    st.session_state['last_update'] = time.time()
+        # Display leading candidate information
+        st.markdown("""---""")
+        st.header('Leading Candidate')
+        col1, col2 = st.columns(2)
+        with col1:
+            st.image(leading_candidate['photo_url'], width=200)
+        with col2:
+            st.header(leading_candidate['candidate_name'])
+            st.subheader(leading_candidate['party_affiliation'])
+            st.subheader("Total Vote: {}".format(leading_candidate['total_votes']))
+
+        # Display statistics and visualizations
+        st.markdown("""---""")
+        st.header('Statistics')
+        results = results[['candidate_id', 'candidate_name', 'party_affiliation', 'total_votes']]
+        results = results.reset_index(drop=True)
+
+        # Compute total votes and append as a new row to the DataFrame
+        total_votes_row = {'candidate_name': 'Total Votes', 'total_votes': results['total_votes'].sum()}
+        results = pd.concat([results, pd.DataFrame(total_votes_row, index=[0])], ignore_index=True)
+
+        col1, col2 = st.columns(2)
+
+        results_without_total_votes = results[:-1]  # Exclude the last row
+        # Display bar chart and donut chart
+        with col1:
+            bar_fig = plot_colored_bar_chart(results_without_total_votes)
+            st.pyplot(bar_fig)
+
+        with col2:
+            donut_fig = plot_donut_chart(results_without_total_votes, title='Vote Distribution')
+            st.pyplot(donut_fig)
+
+        # Display table with candidate statistics
+        st.table(results)
+
+        # Identify locations with maximum turnout
+        location_result = location_result.loc[location_result.groupby('address_state')['count'].idxmax()]
+        location_result = location_result.reset_index(drop=True)
+
+        # Display location-based voter information with pagination
+        st.header("Location of Voters")
+        paginate_table(location_result)
+
+        # Update the last refresh time
+        st.session_state['last_update'] = time.time()
+
+        # Check if streaming is completed
+        if not data and location_data:
+            # Stop auto-refresh
+            st_autorefresh(interval=0, key="auto")
+    else:
+        # If no data available, display message
+        st.markdown("No data available. Please wait for data to be streamed.")
 
 
 # Sidebar layout
