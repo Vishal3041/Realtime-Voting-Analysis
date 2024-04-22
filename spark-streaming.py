@@ -34,13 +34,13 @@ if __name__ == "__main__":
         StructField("gender", StringType(), True),
         StructField("nationality", StringType(), True),
         StructField("registration_number", StringType(), True),
-        StructField("address", StructType([
-            StructField("street", StringType(), True),
-            StructField("city", StringType(), True),
-            StructField("state", StringType(), True),
-            StructField("country", StringType(), True),
-            StructField("postcode", StringType(), True)
-        ]), True),
+        # StructField("address_street", StructType([
+        StructField("address_street", StringType(), True),
+        StructField("address_city", StringType(), True),
+        StructField("address_state", StringType(), True),
+        StructField("address_country", StringType(), True),
+        StructField("address_postcode", StringType(), True),
+        # ]), True),
         StructField("email", StringType(), True),
         StructField("phone_number", StringType(), True),
         StructField("cell_number", StringType(), True),
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     # Aggregate votes per candidate and turnout by location
     votes_per_candidate = enriched_votes_df.groupBy("candidate_id", "candidate_name", "party_affiliation",
                                                     "photo_url").agg(_sum("vote").alias("total_votes"))
-    turnout_by_location = enriched_votes_df.groupBy("address.state").count().alias("total_votes")
+    turnout_by_location = enriched_votes_df.groupBy("address_state").count().alias("total_votes")
 
     # Write aggregated data to Kafka topics ('aggregated_votes_per_candidate', 'aggregated_turnout_by_location')
     votes_per_candidate_to_kafka = votes_per_candidate.selectExpr("to_json(struct(*)) AS value") \
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         .format("kafka") \
         .option("kafka.bootstrap.servers", "localhost:9092") \
         .option("topic", "aggregated_votes_per_candidate") \
-        .option("checkpointLocation", "/Users/vishaltripathi/Downloads/RealTimeVoting/checkpoints/checkpoints1") \
+        .option("checkpointLocation", "/Users/vishaltripathi/Downloads/RealTimeVoting/checkpoints/checkpoint1") \
         .outputMode("update") \
         .start()
 
@@ -86,7 +86,7 @@ if __name__ == "__main__":
         .format("kafka") \
         .option("kafka.bootstrap.servers", "localhost:9092") \
         .option("topic", "aggregated_turnout_by_location") \
-        .option("checkpointLocation", "/Users/vishaltripathi/Downloads/RealTimeVoting/checkpoints/chcekpoint2") \
+        .option("checkpointLocation", "/Users/vishaltripathi/Downloads/RealTimeVoting/checkpoints/checkpoint2") \
         .outputMode("update") \
         .start()
 

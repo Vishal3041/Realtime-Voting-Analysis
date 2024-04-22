@@ -8,6 +8,7 @@ from kafka import KafkaConsumer
 from streamlit_autorefresh import st_autorefresh
 import psycopg2
 
+
 # Function to create a Kafka consumer
 def create_kafka_consumer(topic_name):
     # Set up a Kafka consumer with specified topic and configurations
@@ -17,6 +18,7 @@ def create_kafka_consumer(topic_name):
         auto_offset_reset='earliest',
         value_deserializer=lambda x: json.loads(x.decode('utf-8')))
     return consumer
+
 
 # Function to fetch voting statistics from PostgreSQL database
 @st.cache_data
@@ -39,6 +41,7 @@ def fetch_voting_stats():
 
     return voters_count, candidates_count
 
+
 # Function to fetch data from Kafka
 def fetch_data_from_kafka(consumer):
     # Poll Kafka consumer for messages within a timeout period
@@ -51,6 +54,7 @@ def fetch_data_from_kafka(consumer):
             data.append(sub_message.value)
     return data
 
+
 # Function to plot a colored bar chart for vote counts per candidate
 def plot_colored_bar_chart(results):
     data_type = results['candidate_name']
@@ -61,6 +65,7 @@ def plot_colored_bar_chart(results):
     plt.title('Vote Counts per Candidate')
     plt.xticks(rotation=90)
     return plt
+
 
 # Function to plot a donut chart for vote distribution
 def plot_donut_chart(data: pd.DataFrame, title='Donut Chart', type='candidate'):
@@ -76,6 +81,7 @@ def plot_donut_chart(data: pd.DataFrame, title='Donut Chart', type='candidate'):
     plt.title(title)
     return fig
 
+
 # Function to plot a pie chart for vote distribution
 def plot_pie_chart(data, title='Gender Distribution of Voters', labels=None):
     sizes = list(data.values())
@@ -88,11 +94,13 @@ def plot_pie_chart(data, title='Gender Distribution of Voters', labels=None):
     plt.title(title)
     return fig
 
+
 # Function to split a dataframe into chunks for pagination
 @st.cache_data(show_spinner=False)
 def split_frame(input_df, rows):
     df = [input_df.loc[i: i + rows - 1, :] for i in range(0, len(input_df), rows)]
     return df
+
 
 # Function to paginate a table
 def paginate_table(table_data):
@@ -168,15 +176,21 @@ def update_data():
     st.header('Statistics')
     results = results[['candidate_id', 'candidate_name', 'party_affiliation', 'total_votes']]
     results = results.reset_index(drop=True)
+
+    # Compute total votes and append as a new row to the DataFrame
+    total_votes_row = {'candidate_name': 'Total Votes', 'total_votes': results['total_votes'].sum()}
+    results = pd.concat([results, pd.DataFrame(total_votes_row, index=[0])], ignore_index=True)
+
     col1, col2 = st.columns(2)
 
+    results_without_total_votes = results[:-1]  # Exclude the last row
     # Display bar chart and donut chart
     with col1:
-        bar_fig = plot_colored_bar_chart(results)
+        bar_fig = plot_colored_bar_chart(results_without_total_votes)
         st.pyplot(bar_fig)
 
     with col2:
-        donut_fig = plot_donut_chart(results, title='Vote Distribution')
+        donut_fig = plot_donut_chart(results_without_total_votes, title='Vote Distribution')
         st.pyplot(donut_fig)
 
     # Display table with candidate statistics
@@ -186,9 +200,10 @@ def update_data():
     location_consumer = create_kafka_consumer("aggregated_turnout_by_location")
     location_data = fetch_data_from_kafka(location_consumer)
     location_result = pd.DataFrame(location_data)
+    # print("location_result: ", location_result)
 
     # Identify locations with maximum turnout
-    location_result = location_result.loc[location_result.groupby('state')['count'].idxmax()]
+    location_result = location_result.loc[location_result.groupby('address_state')['count'].idxmax()]
     location_result = location_result.reset_index(drop=True)
 
     # Display location-based voter information with pagination
@@ -198,6 +213,7 @@ def update_data():
     # Update the last refresh time
     st.session_state['last_update'] = time.time()
 
+
 # Sidebar layout
 def sidebar():
     # Initialize last update time if not present in session state
@@ -205,12 +221,13 @@ def sidebar():
         st.session_state['last_update'] = time.time()
 
     # Slider to control refresh interval
-    refresh_interval = st.sidebar.slider("Refresh interval (seconds)", 5, 60, 10)
+    refresh_interval = st.sidebar.slider("Refresh interval (seconds)", 5, 60, 5)
     st_autorefresh(interval=refresh_interval * 1000, key="auto")
 
     # Button to manually refresh data
     if st.sidebar.button('Refresh Data'):
         update_data()
+
 
 # Title of the Streamlit dashboard
 st.title('Real-time Election Dashboard')

@@ -6,7 +6,7 @@ import simplejson as json
 from confluent_kafka import SerializingProducer
 
 BASE_URL = 'https://randomuser.me/api/?nat=gb'
-PARTIES = ["Management Party", "Savior Party", "Tech Republic Party"]
+PARTIES = ["Bhartiya Janta Party (BJP)", "Congress", "Others"]
 random.seed(42)
 
 
@@ -153,7 +153,7 @@ if __name__ == "__main__":
                 candidate['campaign_platform'], candidate['photo_url']))
             conn.commit()
 
-    for i in range(5000):
+    for i in range(500):
         voter_data = generate_voter_data()
         insert_voters(conn, cur, voter_data)
 

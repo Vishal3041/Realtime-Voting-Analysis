@@ -1,12 +1,11 @@
 import random
 import time
 from datetime import datetime
-
 import psycopg2
 import simplejson as json
 from confluent_kafka import Consumer, KafkaException, KafkaError, SerializingProducer
 
-from main import delivery_report
+# from main import delivery_report
 
 conf = {
     'bootstrap.servers': 'localhost:9092',
@@ -19,6 +18,13 @@ consumer = Consumer(conf | {
 })
 
 producer = SerializingProducer(conf)
+
+
+def delivery_report(err, msg):
+    if err is not None:
+        print(f'Message delivery failed: {err}')
+    else:
+        print(f'Message delivered to {msg.topic()} [{msg.partition()}]')
 
 
 def consume_messages():
@@ -45,6 +51,77 @@ def consume_messages():
         print(e)
 
 
+def consume_messages_voters(candidates):
+    voter_count = 0
+    sampled_voters = []
+    consumer.subscribe(['voters_topic'])
+
+    try:
+        while True:
+            msg = consumer.poll(timeout=1.0)
+            if msg is None:
+                continue
+            elif msg.error():
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    continue
+                else:
+                    print(msg.error())
+                    break
+            else:
+                voter = json.loads(msg.value().decode('utf-8'))
+                voter_count += 1
+
+                reservoir_sampling(voter, 3, sampled_voters)
+                # print("sampled_voters: ", sampled_voters)
+
+                if voter_count >= 3:
+                    for voter in sampled_voters:
+                        candidate = random.choice(candidates)
+                        vote = voter | candidate | {
+                            "voting_time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                            "vote": 1
+                        }
+
+                        try:
+                            print("User {} is voting for candidate: {}".format(vote['voter_id'], vote['candidate_id']))
+                            cur.execute("""
+                                    INSERT INTO votes (voter_id, candidate_id, voting_time)
+                                    VALUES (%s, %s, %s)
+                                """, (vote['voter_id'], vote['candidate_id'], vote['voting_time']))
+
+                            conn.commit()
+
+                            producer.produce(
+                                'votes_topic',
+                                key=vote["voter_id"],
+                                value=json.dumps(vote),
+                                on_delivery=delivery_report
+                            )
+                            producer.poll(0)
+                        except Exception as e:
+                            print("Error: {}".format(e))
+                            continue
+
+                    voter_count = 0
+                    sampled_voters = []
+
+            time.sleep(0.2)
+    except KafkaException as e:
+        print(e)
+
+
+def reservoir_sampling(voter, k, sampled_voters):
+    voter_count = len(sampled_voters)
+    n = voter_count + 1
+
+    if voter_count < k:
+        sampled_voters.append(voter)
+    else:
+        j = random.randint(0, n - 1)
+        if j < k:
+            sampled_voters[j] = voter
+
+
 if __name__ == "__main__":
     conn = psycopg2.connect("host=localhost dbname=voting user=postgres password=postgres")
     cur = conn.cursor()
@@ -63,46 +140,47 @@ if __name__ == "__main__":
     else:
         print(candidates)
 
-    consumer.subscribe(['voters_topic'])
-    try:
-        while True:
-            msg = consumer.poll(timeout=1.0)
-            if msg is None:
-                continue
-            elif msg.error():
-                if msg.error().code() == KafkaError._PARTITION_EOF:
-                    continue
-                else:
-                    print(msg.error())
-                    break
-            else:
-                voter = json.loads(msg.value().decode('utf-8'))
-                chosen_candidate = random.choice(candidates)
-                vote = voter | chosen_candidate | {
-                    "voting_time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-                    "vote": 1
-                }
-
-                try:
-                    print("User {} is voting for candidate: {}".format(vote['voter_id'], vote['candidate_id']))
-                    cur.execute("""
-                            INSERT INTO votes (voter_id, candidate_id, voting_time)
-                            VALUES (%s, %s, %s)
-                        """, (vote['voter_id'], vote['candidate_id'], vote['voting_time']))
-
-                    conn.commit()
-
-                    producer.produce(
-                        'votes_topic',
-                        key=vote["voter_id"],
-                        value=json.dumps(vote),
-                        on_delivery=delivery_report
-                    )
-                    producer.poll(0)
-                except Exception as e:
-                    print("Error: {}".format(e))
-                    # conn.rollback()
-                    continue
-            time.sleep(0.2)
-    except KafkaException as e:
-        print(e)
+    # consumer.subscribe(['voters_topic'])
+    # try:
+    #     while True:
+    #         msg = consumer.poll(timeout=1.0)
+    #         if msg is None:
+    #             continue
+    #         elif msg.error():
+    #             if msg.error().code() == KafkaError._PARTITION_EOF:
+    #                 continue
+    #             else:
+    #                 print(msg.error())
+    #                 break
+    #         else:
+    #             voter = json.loads(msg.value().decode('utf-8'))
+    #             chosen_candidate = random.choice(candidates)
+    #             vote = voter | chosen_candidate | {
+    #                 "voting_time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+    #                 "vote": 1
+    #             }
+    #
+    #             try:
+    #                 print("User {} is voting for candidate: {}".format(vote['voter_id'], vote['candidate_id']))
+    #                 cur.execute("""
+    #                         INSERT INTO votes (voter_id, candidate_id, voting_time)
+    #                         VALUES (%s, %s, %s)
+    #                     """, (vote['voter_id'], vote['candidate_id'], vote['voting_time']))
+    #
+    #                 conn.commit()
+    #
+    #                 producer.produce(
+    #                     'votes_topic',
+    #                     key=vote["voter_id"],
+    #                     value=json.dumps(vote),
+    #                     on_delivery=delivery_report
+    #                 )
+    #                 producer.poll(0)
+    #             except Exception as e:
+    #                 print("Error: {}".format(e))
+    #                 # conn.rollback()
+    #                 continue
+    #         time.sleep(0.2)
+    # except KafkaException as e:
+    #     print(e)
+    consume_messages_voters(candidates)
